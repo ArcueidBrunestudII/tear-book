@@ -1,0 +1,983 @@
+2025-12-16 | 创建项目文件夹 EduMind | 多模态学习应用，面向本科及以上用户，使用硅基流动DeepSeek API
+
+2025-12-16 | 项目目标确立:
+  - 核心理念: 逐字逐句拆解知识点,不是AI式总结,要完整保留细节
+  - 用户场景: 上传大量文献/参考书,流畅列出所有知识点
+  - 知识点特性: 分层级结构,可勾选启用/禁用,保存为独特后缀文件
+  - 当前任务: 先做简单聊天窗口原型,支持选模型+上传文件
+2025-12-16 | API测试通过: DeepSeek-V3/VL2/OCR均可用,Base64图片方式
+
+2025-12-16 | 聊天原型测试总结:
+  - 文本模型(V3.2)正常工作
+  - 视觉模型(VL2)问题: 1.默认返回英文 2.不支持多轮带图对话 3.token限制4096易超
+  - PDF处理: PyMuPDF可提取文字型PDF, 扫描件需转图片用视觉模型
+  - 待解决: 图文混合PDF的完整识别方案
+
+2025-12-16 | PDF识别方案确定:
+  - DeepSeek-OCR: 推荐! 专用OCR模型,识别准确,公式转LaTeX
+  - Qwen2.5-VL-72B: 备选,识别效果好
+  - DeepSeek-VL2: 不推荐,token限制4096太小
+  - 测试.pdf(量子力学习题)识别成功,公式完整
+
+2025-12-16 | OCR对比查看器已创建: EduMind/test/ocr_compare_viewer.py
+  - 可同时调用DeepSeek-OCR和Qwen2.5-VL对比识别效果
+
+2025-12-16 | 项目主体架构确定:
+  框架: Tauri (Rust后端 + Web前端)
+  
+  核心设计:
+  1. 主界面: 白色画布，左侧 > 展开设置面板
+  2. 设置: API Key、模型选择、深度思考模式、视觉模型、初始知识点数量
+  3. 文件处理: 拖拽任意文件(.txt/.md/.pdf/.png/.jpg)自动识别
+  4. 应用化: 每个文件生成一个"应用"图标(类似Win11桌面)
+     - 可改名、改图标(选图片)
+     - 底部进度条显示知识点处理进度
+     - 右键菜单: 重命名/更换图标/属性(文件大小、知识点数等)
+  5. 应用合并: 可拖拽合并多个应用，知识点融合
+  6. 双面板: 双击应用打开
+     - 前面板: 暂空
+     - 后面板: 思维导图，知识点可开关/编辑/删除
+  7. 增量处理: 支持分批识别，新知识点叠加到已有数据
+  8. 独特文件格式: 自定义后缀保存知识点数据
+  
+  技术要点:
+  - 动画流畅(CSS动画/Framer Motion)
+  - 增量识别机制(记录已处理位置)
+  - 知识点层级结构存储
+
+2025-12-16 | Tauri项目初始化完成:
+  路径: EduMind/eduflow/
+  技术栈: Tauri 2.0 + React 18 + TypeScript + Framer Motion
+  
+  已完成的组件:
+  - src/stores/appStore.ts: 全局状态管理(Zustand)
+  - src/components/SettingsPanel.tsx: 左侧设置面板
+  - src/components/Canvas.tsx: 主画布+文件拖拽
+  - src/components/AppIcon.tsx: 应用图标+右键菜单+属性面板
+  - src/styles/global.css: 全局样式和动画
+  - src-tauri/: Rust后端配置
+  
+  数据结构:
+  - AppItem: 每个文件对应一个"应用"
+  - KnowledgePoint: 知识点(id,content,level,parentId,children,enabled)
+  - Settings: API Key,模型选择,初始知识点数量等
+  
+  待实现:
+  - API调用逻辑(调用硅基流动识别文件)
+  - 知识点增量处理
+  - 思维导图面板
+  - 应用合并功能
+
+2025-12-16 | Tauri应用开发进度:
+  已完成:
+  - Tauri 2.0 + React + TypeScript 项目结构搭建
+  - 主界面: 白色画布 + 左侧 > 展开设置面板
+  - 设置面板: API Key输入、模型选择(OCR/文本)、深度思考开关、知识点数量滑块
+  - 应用图标组件: 彩色方块、名称、进度条、右键菜单、属性面板
+  - 状态管理(Zustand): apps列表、settings、持久化存储
+  
+  未解决的问题:
+  1. "获取 API Key" 链接点击无法打开浏览器
+     - 已尝试: 改用button + window.open()
+     - 可能原因: Tauri安全策略限制外部链接
+     - 建议方案: 使用 @tauri-apps/plugin-shell 的 open() 函数
+  
+  2. 文件拖拽后不显示应用图标
+     - 已尝试: 改用document原生事件监听
+     - 可能原因: Tauri的webview拖拽事件可能被拦截
+     - 建议方案: 使用 @tauri-apps/plugin-fs 或 tauri拖拽API
+  
+  项目文件结构:
+  EduMind/eduflow/
+  ├── src/
+  │   ├── App.tsx              # 主入口
+  │   ├── main.tsx             # React挂载
+  │   ├── components/
+  │   │   ├── Canvas.tsx       # 主画布+拖拽
+  │   │   ├── Canvas.css
+  │   │   ├── SettingsPanel.tsx # 设置面板
+  │   │   ├── SettingsPanel.css
+  │   │   ├── AppIcon.tsx      # 应用图标+右键菜单+属性
+  │   │   └── AppIcon.css
+  │   ├── stores/
+  │   │   └── appStore.ts      # Zustand状态管理
+  │   └── styles/
+  │       └── global.css       # 全局样式+动画
+  ├── src-tauri/
+  │   ├── src/main.rs          # Rust后端入口
+  │   ├── Cargo.toml           # Rust依赖
+  │   ├── tauri.conf.json      # Tauri配置
+  │   └── icons/icon.ico       # 应用图标
+  ├── package.json
+  ├── vite.config.ts
+  └── tsconfig.json
+
+  核心设计理念(用户需求):
+  - 拖拽任意文件(.txt/.md/.pdf/.png/.jpg)自动识别生成"应用"图标
+  - 应用可改名、换图标、查看属性、合并
+  - 双击进入双面板: 前面板(暂空) + 后面板(思维导图)
+  - 知识点: 分层级、可开关、可编辑、增量处理
+  - 保存为独特后缀文件格式
+  - 动画流畅美观
+  
+  技术栈: Tauri 2.0, React 18, TypeScript, Framer Motion, Zustand
+  API: 硅基流动 (DeepSeek-OCR, DeepSeek-V3, Qwen2.5-VL)
+
+2025-12-16 | 修复两处未解决问题 + 验证
+  问题1: “获取 API Key” 链接点击无法打开浏览器
+    - 处理: 前端 `SettingsPanel.tsx` 改为优先使用 `@tauri-apps/plugin-shell` 的 `open(url)`；失败回退 `window.open(url, '_blank', 'noopener,noreferrer')`
+    - 依赖: `package.json` 新增 `@tauri-apps/plugin-shell`；`src-tauri/Cargo.toml` 新增 `tauri-plugin-shell = "2"`
+    - 后端: `src-tauri/src/main.rs` 注册 `.plugin(tauri_plugin_shell::init())`
+
+  问题2: 文件拖拽后不显示应用图标
+    - 处理: `Canvas.tsx` 改为优先监听 Tauri `getCurrentWindow().onDragDropEvent` 的 `enter/over/leave/drop` 事件，在 `drop` 时从 `paths` 生成 AppItem 并加入 store；非 Tauri 环境自动回退到 DOM drag/drop
+    - 备注: 为复用逻辑新增 `createAppFromFile()` 与路径取名 `getFileNameFromPath()`
+
+  构建/检查
+    - `npm run build` 初次失败（TS noUnusedLocals/noUnusedParameters），已清理未使用导入/参数：`AppIcon.tsx`、`Canvas.tsx`、`appStore.ts`
+    - `npm run build` 通过
+    - `cargo check` 通过（包含 `tauri-plugin-shell`）
+
+  Tauri 2 权限/能力配置
+    - 发现: Tauri 2 需要 capabilities 才能启用 IPC/插件权限，否则 `shell.open` / `window` 相关能力可能被拒绝
+    - 新增: `src-tauri/capabilities/default.json`，为主窗口授权 `core:default` + `shell:default`
+    - `tauri dev` 已重启并运行 `target\\debug\\eduflow.exe`
+
+  2025-12-16 | 用户明确“增量识别 + 缓存 + 双进度条 + .zsd”核心逻辑（需求细化）
+    设置
+      - 新增/确认: “每次识别的知识点数量”(批量目标 N)。
+    增量识别主流程（PDF/图片/文本统一抽象为“单位”）
+      - 每次读取 1 页(PDF) / 1 张(图片) / 1 段(文本)，把 OCR/文本结果追加到缓存。
+      - 触发识别时：用当前缓存抽取知识点；若数量不足 N，则继续再读 1 个单位、再抽取，直到达到 N 或读完。
+      - 缓存策略（即读即删/分部处理关键）：某一批完成后，要把“已消耗的单位”从待处理队列中移除，仅保留未处理部分，下一批继续。
+      - 图片兜底: 若 1 张图仍不足 N，支持分半(上半/下半)继续读取并缓存。
+    进度指示（应用图标下两条进度条）
+      - 第 1 条绿色进度条: 指示“读单位/缓存”进度（每读一页/一张/半张就推进）。
+      - 第 2 条蓝色进度条: 指示“本批知识点数量进度”；右侧有一个 “>” 按钮，按一次就执行“再识别 N 个知识点”。
+    展示面板（先不做思维导图）
+      - 前面板: 暂不处理。
+      - 后面板: 先做一个列表框，知识点可点选勾选/不选；知识点需要分级显示。
+      - 保留“分级参考信息”(用于下次识别时按层次对齐/续写)。
+    文件格式
+      - 所有中间数据/缓存/分批进度/知识点等，统一保存到自定义 `.zsd` 后缀文件。
+      - `.zsd` 目标: 可拷贝到别的电脑，用 EduFlow 打开继续识别/继续增量。
+    当前进度与展望
+      - 进度: 已有“拖拽→识别→知识点写回”的最小链路；已补 Tauri capabilities（core/shell/fs 读权限）与 Rust 代理 SiliconFlow 请求。
+      - 下一步: 1) 在 store 增加分批/缓存/游标字段 2) AppIcon 增加双进度条 + “>” 触发下一批 3) PDF/图片按单位增量读取 4) `.zsd` 序列化/反序列化与拖入恢复。
+
+    2025-12-16 | 交接用详细变更记录（本轮我具体做了啥）
+      目标
+        - 按你口述逻辑落地：设置“每批知识点数量 N”；按页/按张增量读取并缓存；知识点不足 N 继续读下一单位；双进度条（绿=读单位/缓存；蓝=本批知识点）+ 蓝条右侧 “>” 触发下一批；后面板先做分级勾选列表；数据保存为 `.zsd` 可跨机器继续。
+
+      1) 设置项（每批知识点数量）
+        - 文件: `EduMind/eduflow/src/stores/appStore.ts`
+          - `Settings` 新增字段: `batchKnowledgeCount: number`
+          - 保留旧字段 `initialKnowledgeCount` 做兼容（当前代码把它当作默认/回退）
+        - 文件: `EduMind/eduflow/src/components/SettingsPanel.tsx`
+          - 原“初始识别知识点数量”滑块改为“每次识别知识点数量”
+          - 交互: 调整滑块会同时写入 `batchKnowledgeCount` 与 `initialKnowledgeCount`（兼容旧逻辑）
+
+      2) 数据结构扩展（支持增量/缓存/分级参考）
+        - 文件: `EduMind/eduflow/src/stores/appStore.ts`
+          - `KnowledgePoint` 新增: `refPath: string[]`（分级参考路径，用于后续“分层对齐/续写”）
+          - `AppItem` 新增增量状态字段：
+            - `contentCursor` / `contentTotal` / `hasMore`（读单位游标、总量、是否还有更多）
+            - `batchIndex` / `batchTarget` / `batchProducedCount`（批次号、本批目标 N、本批产出数量）
+            - `cacheText`（缓存文本：用于“读一页→缓存→不够再读一页”循环）
+          - `mergeApps` 生成的新 app 补齐上述字段默认值，避免类型不一致
+
+      3) UI：应用图标双进度条 + “>” 触发下一批
+        - 文件: `EduMind/eduflow/src/components/AppIcon.tsx`
+          - 组件 props 新增: `onNextBatch?: () => void`
+          - UI 改为两条进度条：
+            - 绿色条：`contentCursor/contentTotal`
+            - 蓝色条：`batchProducedCount/batchTarget`
+            - 蓝条右侧按钮 “>” ：非 processing 且 `hasMore` 时可点
+          - “完成 ✓” 仅在 `status==='done' && !hasMore` 时显示（表示内容已读完）
+        - 文件: `EduMind/eduflow/src/components/AppIcon.css`
+          - 新增 `.progress-stack` / `.progress-row` / `.next-batch-btn`
+          - 新增 `.progress-fill.green` / `.progress-fill.blue` 变体
+
+      4) 核心逻辑：增量识别（缓存 + 单位推进 + 追加知识点）
+        - 文件: `EduMind/eduflow/src/components/Canvas.tsx`
+          - 提示词调整：要求“最多 N 条，不足可少输出，禁止编造”
+          - `createAppFromFile()`：
+            - 支持拖入 `.zsd`
+            - 初始化增量字段（cursor/total/hasMore/batch/cache）
+            - `totalEstimate` 用当前 `batchTarget`（蓝条目标）
+          - `toKnowledgePoints()`：
+            - 自动生成 `refPath`（从 parentId 回溯生成路径），给后续层级对齐留数据
+          - 新增工具函数：
+            - `replaceExt()`：用于把源文件路径替换成 `.zsd` 路径
+            - `remapBatchIds()`：给每批知识点 id 加前缀（`b{batchIndex}_`）避免不同批次 id 冲突，并重算 `refPath`
+            - `splitImageBase64Halves()`：图片不足时把整张分成上/下半裁剪再 OCR
+          - 用 `runBatch()` 替换旧的 `processApp()`（这是关键改动）：
+            - `.zsd`：直接读取并恢复 app（替换当前临时 app）
+            - `.txt/.md`：当前简化为一次性读完（contentTotal=1），抽取最多 N；（后续可再做“分段/窗口化”）
+            - `.pdf`：
+              - 获取总页数（见第 5 点 pdfToImage）
+              - 从 `contentCursor+1` 页开始：每读一页 OCR→追加到 `cacheText`→抽取知识点
+              - 若本批知识点数量不足 N，则继续读下一页再试，直到满足 N 或读完
+            - `.png/.jpg/.jpeg`：
+              - 第一次 OCR 整张
+              - 如果仍不足 N，则自动分上/下半各 OCR 再试（作为“半张半张读”的 MVP）
+            - 每批结束：
+              - 把本批知识点 remap 后 **追加** 到 `knowledgePoints`（不覆盖旧数据）
+              - `cacheText` 清空（“即读即删”的第一步：缓存只用于凑够本批，不长期堆积）
+              - `status`：若 PDF 仍有剩余页则回到 `pending`（等待用户点 “>” 下一批）；读完则 `done`
+          - `AppIcon` 的 `onNextBatch` 已改为调用 `runBatch()`
+
+      5) PDF：支持“获取页数 + 指定页渲染”为增量读取准备
+        - 文件: `EduMind/eduflow/src/services/pdfToImage.ts`
+          - 新增 `getPdfPageCount(pdfBytes)`
+          - 新增 `pdfPageToPngBase64(pdfBytes, pageNumber)`
+          - 保留 `pdfFirstPageToPngBase64()` 作为兼容封装（内部调用 page=1）
+
+      6) `.zsd` 文件（序列化/反序列化 + 兼容旧字段）
+        - 新增文件: `EduMind/eduflow/src/services/zsd.ts`
+          - `serializeAppToZsd(app)`：输出 JSON（version=1）
+          - `parseZsd(text)`：解析并对缺失字段补默认值（含新增增量字段、kp.refPath、enabled 等）
+        - 写出策略（当前 MVP）：
+          - 在 Tauri 且源文件路径看起来是本地盘符路径时，尝试写到“同目录同名 .zsd”（例如 `xxx.pdf` → `xxx.zsd`）
+          - 写入失败会 `console.warn`，不阻断流程
+
+      7) Tauri 权限：为读取/写入拖入文件和 `.zsd` 落盘放开权限
+        - 文件: `EduMind/eduflow/src-tauri/capabilities/default.json`
+          - 在已有 `fs:allow-read*` 基础上新增 `fs:allow-write*`
+          - `fs:scope` 仍为 allow `**/*`（后续可收敛到用户目录或拖入路径范围）
+
+      8) 其他关键修复（本轮前序已做，交接一并记录）
+        - 外链打开：`SettingsPanel.tsx` 优先 `@tauri-apps/plugin-shell` 打开（Tauri 中替代 window.open）
+        - 拖拽：`Canvas.tsx` 优先用 Tauri `onDragDropEvent`，并做去重避免一次拖入生成两个应用
+        - SiliconFlow 调用：已加 Rust 端 `siliconflow_chat` command 作为代理（绕过 WebView 里 fetch/CORS/网络限制）
+
+      9) 验证/运行命令（交接给下一位直接用）
+        - 前端构建：在 `EduMind/eduflow` 下执行 `npm run build`（已通过）
+        - Rust 检查：在 `EduMind/eduflow/src-tauri` 下执行 `cargo check`（已通过）
+        - 启动：推荐固定用（避免工作目录错）
+          - `npm --prefix "f:\编程项目\0011\EduMind\eduflow" run tauri dev`
+
+      10) 已知限制/下一位建议优先级（很重要）
+        - 目前 “hasMore/绿条” 的完整增量只对 PDF 做了严格意义上的“按页推进”；图片只做了“整张→半张”两步；文本暂为一次性。
+        - “即读即删/分部处理” 目前体现为：每批结束清空 `cacheText`；但对 PDF 的“删掉已读页 OCR 文本”属于自然丢弃（不会再保留 OCR 结果），尚未做更细粒度的“仅消耗部分缓存文本”。
+        - `.zsd` 现在是 JSON v1：能跨机器恢复，但还没加压缩/校验/分块；后续可考虑：
+          - 引入 `schema` / `hash` / `compression`（如 gzip/base64）
+          - 把 OCR 中间产物也写入 `.zsd`（避免重复 OCR）
+        - `fs:scope` 目前过宽（`**/*`），生产化应收敛到用户目录或显式授权路径。
+        - 后面板目前是"分级勾选列表"，未做思维导图；但 `refPath` 已保留，为后续分层对齐打基础。
+
+2025-12-16 | LabVIEW 风格改造完成（双击打开新窗口 + 前后面板 + 撕书动画 + 题目生成）
+
+  核心需求
+    1. 双击应用打开新窗口 - 类似 LabVIEW 的前后面板，是真正的独立新窗口（非覆盖层）
+    2. "撕书"概念 - 点击运行按钮时有撕书动画，表示正在从知识中"撕出"题目
+    3. 后面板 - 树形知识点目录，三态复选框级联选择，双击末级弹出详情，顶部工具条+运行按钮
+    4. 前面板 - 根据选中知识点生成题目，答案可隐藏，可收藏
+    5. 设置扩展 - 题目类型、数量、答案默认显示、默认难度
+
+  技术方案
+    - 多窗口架构: Tauri WebviewWindow API
+    - 路由方案: React Router (`/` 主窗口, `/app/:appId` 应用窗口)
+    - 状态管理: Zustand 跨窗口共享
+
+  新增数据结构
+    - QuestionType: 'choice' | 'fill' | 'calculation' | 'short_answer' | 'proof'
+    - Question: { id, type, content, options?, answer, analysis?, difficulty, isFavorite, createdAt }
+    - QuestionSession: { id, questions, selectedKnowledgeIds, createdAt }
+    - TearingState: { isActive, progress, appId }
+    - KnowledgePoint 扩展: selected, detailContent
+    - AppItem 扩展: questionSessions, currentSessionId
+    - Settings 扩展: questionTypes, questionCountPerType, defaultShowAnswer, defaultDifficulty
+
+  新增文件清单
+    | 文件 | 说明 |
+    |------|------|
+    | src/services/windowManager.ts | 窗口管理服务（打开/关闭/聚焦应用窗口）|
+    | src/services/questionGenerator.ts | 题目生成服务（调用 AI 生成各类型题目）|
+    | src/pages/AppWindow.tsx + .css | 应用窗口主页面（前后面板切换）|
+    | src/components/Toolbar.tsx + .css | 工具条组件（面板切换 + 运行按钮）|
+    | src/components/BackPanel.tsx + .css | 后面板组件（知识点树容器）|
+    | src/components/FrontPanel.tsx + .css | 前面板组件（题目卡片列表）|
+    | src/components/KnowledgeTree.tsx + .css | 知识点树形组件（三态复选框 + 级联选择）|
+    | src/components/KnowledgeDetailModal.tsx + .css | 知识点详情弹窗（懒加载详细讲解）|
+    | src/components/QuestionCard.tsx + .css | 题目卡片组件（类型标签 + 难度徽章 + 答案折叠）|
+    | src/components/TearAnimation.tsx + .css | 撕书动画组件（书本翻页 + 纸片飘散 + 进度条）|
+
+  修改文件清单
+    | 文件 | 修改内容 |
+    |------|---------|
+    | package.json | 添加 react-router-dom 依赖 |
+    | src/main.tsx | 配置 BrowserRouter + Routes |
+    | src/stores/appStore.ts | 扩展数据结构 + 新增 actions (toggleKnowledgeSelect, selectAllKnowledge, updateKnowledgeDetail, addQuestionSession, toggleQuestionFavorite, setTearingState, setPanelMode) |
+    | src-tauri/tauri.conf.json | 主窗口添加 label: "main" |
+    | src-tauri/capabilities/default.json | 添加 window/webview 创建权限 |
+    | src/components/Canvas.tsx | 双击改为调用 openAppWindow()，移除旧覆盖层面板 |
+    | src/components/SettingsPanel.tsx + .css | 添加题目类型多选、数量滑块、难度下拉、答案默认显示开关 |
+    | src/services/zsd.ts | 升级到 v2 格式，支持 questionSessions/selected/detailContent |
+
+  关键组件设计
+    1. KnowledgeTree (知识点树)
+       - 递归 TreeNode 组件
+       - 三态复选框：全选/半选/未选
+       - 级联选择：选父节点自动选所有子节点
+       - 双击叶子节点弹出详情弹窗
+       - 默认展开到第 2 级
+
+    2. QuestionCard (题目卡片)
+       - 类型标签（选择题蓝色/填空题绿色/计算题橙色/简答题紫色/证明题红色）
+       - 难度徽章（简单绿/中等黄/困难红）
+       - 选择题显示 ABCD 选项
+       - 答案折叠/展开动画 (Framer Motion)
+       - 收藏星标按钮
+
+    3. TearAnimation (撕书动画)
+       - 书本翻页效果 (rotateY 动画)
+       - 纸片飘散粒子 (15个随机轨迹)
+       - 进度条显示生成进度
+
+  用户确认的选项
+    - 撕书动画触发时机: 点击运行按钮时
+    - 题目持久化: 保存到 .zsd 文件，下次可看历史题目
+    - 知识点树默认状态: 展开到 2 级（章节级别）
+
+  构建验证
+    - TypeScript 检查通过 ✓
+    - Vite 前端构建成功 ✓
+    - Tauri 应用构建成功 ✓
+    - 输出: src-tauri/target/release/eduflow.exe
+
+  使用说明
+    1. 主窗口拖拽文件创建应用图标
+    2. 双击应用图标打开独立新窗口
+    3. 后面板：勾选知识点（级联选择），双击叶节点查看详情
+    4. 点击运行按钮生成题目（显示撕书动画）
+    5. 前面板：查看生成的题目，点击展开答案，可收藏
+    6. 左侧设置面板：配置 API Key、题目类型、数量等
+
+2025-12-16 | LabVIEW 风格改造修正 + "撕书"逻辑讨论
+
+  用户反馈的问题
+    1. LabVIEW 前后面板应该是两个独立窗口，而非同一窗口内的 Tab 切换
+    2. "撕书"动画理解错误 - 不是视觉动画效果，而是"一点一点读书"的增量处理概念
+    3. txt 文件（20道题）只识别了5个知识点就停止，无法继续点击 ">" 读取更多
+    4. 5个知识点只生成了1道题
+
+  本次修复内容
+
+    1) 双窗口架构重构
+       - 删除文件: TearAnimation.tsx/css, AppWindow.tsx/css, Toolbar.tsx/css
+       - 新增 BackPanelWindow.tsx: 独立后面板窗口（知识点树 + 运行按钮）
+       - 新增 FrontPanelWindow.tsx: 独立前面板窗口（题目展示）
+       - 修改 main.tsx 路由:
+         - `/app/:appId/back` → BackPanelWindow
+         - `/app/:appId/front` → FrontPanelWindow
+       - 修改 windowManager.ts:
+         - openAppWindow() 现在打开两个窗口（back 在 x=100, front 在 x=620）
+         - 两个窗口并排显示，真正实现 LabVIEW 风格
+
+    2) txt 文件分块读取修复
+       - 问题根因: txt 被当作 1 个单位（contentTotal=1），读完就结束
+       - 修复: 按 3000 字符分块，支持智能断句（段落/句号结尾）
+       - Canvas.tsx 新增逻辑:
+         ```
+         const TEXT_CHUNK_SIZE = 3000
+         contentTotal = Math.ceil(fullText.length / TEXT_CHUNK_SIZE)
+         ```
+
+    3) hasMore 逻辑修复
+       - 问题根因: `hasMore = isPdf ? contentCursor < contentTotal : false`
+       - 修复: 改为 `hasMore = contentCursor < contentTotal`（所有文件类型通用）
+
+    4) 题目生成器优化
+       - 改进 prompt 格式，更明确要求 JSON 输出
+       - 添加详细日志便于调试
+
+  "撕书"逻辑深度讨论
+
+    场景1: 知识点数量 < 目标数量（文本不够）
+      - 当前逻辑: 继续读下一单位追加到缓存，再次抽取
+      - 最终兜底: 读完所有内容后，输出实际抽取到的数量（可能少于目标）
+
+    场景2: 知识点数量 > 目标数量（文本太多）
+      - 发现的BUG: `produced = await extractOnce(cacheText)` 是覆盖而非累加
+      - 问题: 第一次抽取得到 8 个，再读一单位后再抽取，新的 5 个会覆盖旧的 8 个
+      - 待修复: 应该是 `produced.push(...await extractOnce(cacheText))` 或其他累加逻辑
+
+    用户的核心理解（待实现）
+      - "撕书"的真正含义是对缓存的消耗式处理:
+        1. 将原文档完整复制到 .zsd 缓存
+        2. 每次抽取知识点后，从缓存中删除对应的已处理文本
+        3. 点击 ">" 继续从剩余缓存读取
+        4. 缓存越来越小，直到"撕完"
+
+      - 与当前实现的区别:
+        - 当前: cacheText 每批结束后清空，重新从源文件读取下一块
+        - 期望: cacheText 保留原文副本，逐步删除已处理部分
+
+    暂不实现
+      - 用户明确表示先记录讨论，缓存删除机制后续再做
+      - 当前版本先保持"分块读取 + 清空缓存"的简化模式
+
+  待办事项（下次继续）
+    1. 修复知识点累加 BUG（produced 覆盖问题）
+    2. 实现真正的"撕书"缓存机制（原文副本 → 逐步删除）
+    3. 测试大文件增量处理效果
+
+2025-12-17 | 撕书机制 V3 实现 + 严重问题暴露
+
+  本次实现内容
+    1) .zsd V3 格式重构
+       - 新增 rawContent 字段存储原始内容（文本直接存，PDF/图片存 base64）
+       - 新增 processedOffset 和 totalSize 跟踪处理进度
+       - 向后兼容 V1/V2 格式
+
+    2) 拖入逻辑改造
+       - 拖入任意文件 → 立即转 .zsd（不调用 AI）
+       - 文本：直接存原文，totalSize = 字符数
+       - PDF：存 base64，totalSize = 页数
+       - 图片：存 base64，totalSize = 1
+
+    3) 点击 ">" 处理逻辑
+       - 从 .zsd 的 rawContent 读取未处理部分
+       - PDF/图片：此时才 OCR
+       - 提取知识点 → 更新 processedOffset → 保存 .zsd
+
+    4) 单线程/双线程设置
+       - 新增 processingThreads: 1 | 2 设置
+       - 双线程：并行处理两个块
+
+    5) 修复的 BUG
+       - 主窗口关闭时子窗口不关闭 → App.tsx 添加 onCloseRequested 监听
+       - 进度条顺序调整：上面蓝色=本批进度，下面绿色=总进度
+       - 去掉转圈图案，改为按钮闪烁
+
+  暴露的严重问题（用户反馈）
+
+    问题1: 窗口关不掉
+      - 原因: App.tsx 的 onCloseRequested 可能阻止了窗口关闭
+      - 需要修复
+
+    问题2: 知识点提取逻辑完全错误！！！
+      - 现状: 每句话都变成一个知识点
+      - 期望: 一道题算一个知识点
+      - 核心问题: prompt 设计不对，没有理解"知识点"的真正含义
+
+    问题3: 无法处理复杂内容
+      - 书籍中有大量垃圾内容（插图说明、故事背景、页眉页脚等）
+      - 当前逻辑无法剔除这些内容
+      - 需要智能识别什么是"知识点"，什么是"垃圾"
+
+  图标资源
+    - icon.svg: 主程序图标（2048x2048）
+    - icon2.svg: 子文件(.zsd)图标（2048x2048）
+
+================================================================================
+                           EduFlow 完整改进计划
+================================================================================
+
+  项目定位
+    - 商业化知识元学习软件，对标 Office 套件级别的成熟度
+    - 核心价值：从复杂文档中智能提取"知识元"，而非简单的文本分割
+
+  什么是"知识元"？
+    - 知识元 ≠ 句子
+    - 知识元 ≠ 段落
+    - 知识元 = 一个完整的、可独立理解的知识单位
+    - 例如：
+      - 一道完整的习题（题目+选项+答案）= 1个知识元
+      - 一个定理（定理内容+证明）= 1个知识元
+      - 一个概念（定义+解释+例子）= 1个知识元
+      - 一个公式（公式+推导+应用场景）= 1个知识元
+
+  核心难点
+    1. 如何识别知识元的边界？
+       - 习题：识别"题号"模式（1. 2. 3. 或 一、二、三）
+       - 定理：识别"定理X.X"、"引理"、"推论"等关键词
+       - 概念：识别"定义"、"概念"等关键词
+       - 需要多种模式匹配 + AI 辅助判断
+
+    2. 如何剔除垃圾内容？
+       - 页眉页脚：通常在固定位置，内容重复
+       - 插图说明："图X.X"、"如图所示"
+       - 目录索引：页码、章节号
+       - 版权信息：出版社、ISBN等
+       - 需要预处理阶段过滤
+
+    3. 如何保持知识元的完整性？
+       - 一道题不能被拆成两半
+       - 一个定理的证明不能和定理分开
+       - 需要智能合并相关内容
+
+  改进计划（分阶段）
+
+    第一阶段：知识元识别引擎
+      1. 重写 prompt，明确"知识元"的定义
+      2. 添加预处理：识别文档类型（习题集/教材/论文）
+      3. 根据文档类型选择不同的提取策略
+      4. 添加后处理：合并被错误拆分的知识元
+
+    第二阶段：垃圾内容过滤
+      1. 页眉页脚检测（位置+重复模式）
+      2. 插图说明检测（正则匹配）
+      3. 目录索引检测
+      4. 可配置的过滤规则
+
+    第三阶段：UI/UX 完善
+      1. 使用 icon.svg 作为主程序图标
+      2. 使用 icon2.svg 作为 .zsd 文件图标
+      3. 修复窗口关闭问题
+      4. 优化进度显示
+
+    第四阶段：高级功能
+      1. 知识元关系图谱
+      2. 智能题目生成（基于知识元）
+      3. 学习进度追踪
+      4. 多文档知识元融合
+
+  当前最紧急的修复
+    1. 修复窗口关闭问题
+    2. 重写知识点提取 prompt
+    3. 添加文档类型识别
+    4. API Key 测试连通性按钮
+
+================================================================================
+                           交接说明文档
+================================================================================
+
+  项目概述
+    EduFlow 是一个知识元学习软件，核心功能是从各种文档（PDF/图片/文本）中
+    智能提取"知识元"，帮助用户高效学习。
+
+  技术栈
+    - 前端: React 18 + TypeScript + Framer Motion + Zustand
+    - 后端: Tauri 2.0 (Rust)
+    - API: 硅基流动 (DeepSeek-OCR, DeepSeek-V3)
+    - 文件格式: .zsd (自定义 JSON 格式)
+
+  项目结构
+    F:\编程项目\0011\EduMind\eduflow\
+    ├── src/
+    │   ├── App.tsx                    # 主入口
+    │   ├── main.tsx                   # React 挂载 + 路由
+    │   ├── components/
+    │   │   ├── Canvas.tsx             # 主画布 + 核心处理逻辑（最重要）
+    │   │   ├── AppIcon.tsx            # 应用图标 + 进度条
+    │   │   ├── SettingsPanel.tsx      # 设置面板
+    │   │   ├── KnowledgeTree.tsx      # 知识点树
+    │   │   └── ...
+    │   ├── stores/
+    │   │   └── appStore.ts            # Zustand 状态管理
+    │   ├── services/
+    │   │   ├── zsd.ts                 # .zsd 文件序列化/反序列化
+    │   │   ├── siliconflow.ts         # API 调用
+    │   │   ├── pdfToImage.ts          # PDF 转图片
+    │   │   └── windowManager.ts       # 多窗口管理
+    │   └── pages/
+    │       ├── BackPanelWindow.tsx    # 后面板窗口
+    │       └── FrontPanelWindow.tsx   # 前面板窗口
+    └── src-tauri/
+        ├── src/main.rs                # Rust 后端
+        └── capabilities/default.json  # 权限配置
+
+  核心文件说明
+
+    1. Canvas.tsx (最重要，约 700 行)
+       - convertFileToZsdV3(): 拖入文件时转换为 .zsd 格式
+       - runBatch(): 点击 ">" 时的处理逻辑
+       - buildKnowledgePrompt(): 知识点提取的 prompt（需要重写！）
+       - addIfNew(): 拖入文件的入口
+
+    2. zsd.ts
+       - ZsdFileV3: 最新的 .zsd 格式，包含 rawContent 原始内容
+       - createInitialZsdV3(): 创建初始 .zsd
+       - parseZsdV3(): 解析 .zsd 文件
+
+    3. appStore.ts
+       - AppItem: 每个文件对应的"应用"数据结构
+       - KnowledgePoint: 知识点数据结构
+       - Settings: 设置项
+
+  当前存在的问题
+
+    问题1: 知识点提取逻辑错误（最严重）
+      位置: Canvas.tsx 的 buildKnowledgePrompt() 函数
+      现状: 每句话都变成一个知识点
+      期望: 一道题/一个定理/一个概念 = 一个知识元
+      修复方向:
+        - 重写 prompt，明确"知识元"的定义
+        - 添加文档类型识别（习题集/教材/论文）
+        - 根据类型选择不同的提取策略
+
+    问题2: 窗口关闭问题
+      位置: App.tsx
+      现状: 关闭主窗口后子窗口可能关不掉
+      已尝试修复: onCloseRequested 监听
+
+    问题3: API Key 没有测试按钮
+      位置: SettingsPanel.tsx
+      需要: 添加一个"测试连通性"按钮
+
+    问题4: 进度条逻辑
+      位置: AppIcon.tsx
+      上面蓝色 = 本批进度
+      下面绿色 = 总进度
+
+  .zsd 文件格式 (V3)
+    {
+      "version": 3,
+      "createdAt": 1702800000000,
+      "rawContent": "原始内容（文本直接存，PDF/图片存base64）",
+      "originalFileType": "txt" | "md" | "pdf" | "png" | "jpg" | "jpeg",
+      "originalFileName": "文件名.txt",
+      "processedOffset": 0,      // 已处理的偏移量
+      "totalSize": 10000,        // 总大小（文本=字符数，PDF=页数）
+      "app": { ... AppItem 数据 }
+    }
+
+  运行命令
+    开发: cd EduMind/eduflow && npm run tauri dev
+    构建: cd EduMind/eduflow && npm run tauri build
+    输出: src-tauri/target/release/eduflow.exe
+
+  图标资源
+    - F:\编程项目\0011\icon.svg: 主程序图标
+    - F:\编程项目\0011\icon2.svg: .zsd 文件图标
+
+  下一步建议优先级
+    1. 重写 buildKnowledgePrompt()，实现真正的知识元提取
+    2. 添加 API Key 测试按钮
+    3. 修复窗口关闭问题
+    4. 添加文档类型识别
+    5. 使用 icon.svg 替换默认图标
+
+================================================================================
+2025-12-17 | 核心改进：知识元提取系统重构
+================================================================================
+
+  改进背景
+    用户反馈的核心问题：
+    - 知识元提取逻辑完全错误，每句话都变成一个知识点
+    - 期望：一道题/一个定理/一个概念 = 一个知识元
+    - 无法处理复杂内容（插图说明、故事背景、页眉页脚等垃圾）
+
+  本次改进内容
+
+  1) 知识元提取核心逻辑重写
+     文件: EduMind/eduflow/src/components/Canvas.tsx
+
+     新增函数 detectDocumentType(text, fileName)
+       - 智能识别文档类型：习题集/教材/论文/通用
+       - 基于题号模式识别（1. 2. 3. 或 一、二、三、等）
+       - 基于关键词识别（定理、定义、摘要、答案等）
+       - 基于文件名识别（习题、练习、试卷等）
+
+     重写函数 buildKnowledgePrompt(count, docType)
+       - 根据文档类型生成不同的提取策略
+       - 习题集策略：一道完整的题目 = 一个知识元
+         - 识别题号标记
+         - 题干 + 选项 + 答案合并为一个知识元
+         - 禁止拆分同一道题
+       - 教材策略：定理/定义/概念 = 一个知识元
+         - 包含完整证明
+         - 包含解释说明和示例
+         - 分层级（level 0/1/2）
+       - 论文策略：核心论点/方法/结论 = 一个知识元
+         - 过滤作者信息、致谢、参考文献
+       - 通用策略：智能识别完整知识单位
+
+     核心原则变更
+       - 旧：逐字逐句拆解知识点
+       - 新：知识元 = 完整的、可独立理解的知识单位
+       - 强调：知识元不是每一句话，不是每一个段落
+
+     垃圾内容过滤
+       - 页眉页脚
+       - 页码
+       - 插图说明（如"图X.X"）
+       - 目录索引
+       - 版权信息、出版社信息
+
+     extractKnowledge 函数更新
+       - 自动检测文档类型（首次处理时）
+       - 输出检测结果到控制台便于调试
+       - 增加 maxTokens 到 8000 以容纳完整知识元
+       - 改进 JSON 解析失败时的日志输出
+
+  2) API Key 测试按钮
+     文件: EduMind/eduflow/src/components/SettingsPanel.tsx
+
+     新增功能
+       - 测试连接按钮（在 API Key 输入框下方）
+       - 测试状态显示：idle/testing/success/error
+       - 友好的错误提示：
+         - API Key 无效或已过期
+         - 连接超时，请检查网络
+         - 具体错误信息（截取前50字符）
+       - 测试成功后 3 秒自动恢复
+
+     文件: EduMind/eduflow/src/components/SettingsPanel.css
+       - 新增 .api-key-actions 布局
+       - 新增 .test-btn 按钮样式（idle/testing/success/error 状态）
+       - 新增 .test-message 消息样式
+       - fadeIn 动画效果
+
+  3) 窗口关闭问题修复
+     文件: EduMind/eduflow/src/App.tsx
+
+     修复内容
+       - 并行关闭所有子窗口（而非顺序关闭）
+       - 添加 500ms 超时保护，避免无限等待
+       - 每个 close() 调用单独 catch 错误
+       - 不阻塞主窗口关闭
+
+  4) 图标资源整合
+     文件: EduMind/eduflow/src-tauri/tauri.conf.json
+
+     更新内容
+       - 窗口标题改为 "EduFlow - 知识元学习软件"
+       - 添加 bundle.icon 配置（支持多种尺寸）
+       - 添加 .zsd 文件关联（fileAssociations）
+       - 配置 Windows webview 安装模式
+
+     图标文件
+       - 复制 icon.svg 到 src-tauri/icons/icon.svg
+       - 复制 icon2.svg 到 src-tauri/icons/icon2-zsd.svg
+       - 注意：需要将 SVG 转换为 ICO/PNG 格式
+         推荐工具：
+         - 在线：https://cloudconvert.com/svg-to-ico
+         - 命令行：npx tauri icon <svg-file>
+
+  修改文件清单
+    | 文件 | 修改内容 |
+    |------|---------|
+    | Canvas.tsx | 新增 detectDocumentType(), 重写 buildKnowledgePrompt(), 更新 extractKnowledge() |
+    | SettingsPanel.tsx | 新增 API Key 测试功能 |
+    | SettingsPanel.css | 新增测试按钮样式 |
+    | App.tsx | 优化窗口关闭逻辑 |
+    | tauri.conf.json | 添加 bundle 配置和文件关联 |
+
+  验证方法
+    1. 构建前端: cd EduMind/eduflow && npm run build
+    2. 检查 Rust: cd EduMind/eduflow/src-tauri && cargo check
+    3. 运行开发: npm --prefix "EduMind/eduflow" run tauri dev
+
+  后续建议
+    1. 测试习题集文件，验证一道题 = 一个知识元
+    2. 测试教材 PDF，验证定理/概念识别
+    3. 观察控制台输出的"检测到文档类型"日志
+    4. 如发现识别不准，可调整 detectDocumentType() 中的模式权重
+
+================================================================================
+这是一个成熟的商业化的项目，最后做出来要和office套件一样的，我给你提供了两个svg文件，一个是icon，一个是icon2，这分别是主程序和子文件的图标，但是我能为你
+做的就只有这些了，你要自己构建一个大计划把它处理成一个理想的程序，懂么？现在问题实在太多了我要求你再好好看日志写日志，理清逻辑。还有我要说一些核心的东西你注意:我们是知识元的高
+级学习软件，最主要的难点是如何分离抽出知识点，我在上次测试的时候就发现非常的不理想，要能够在复杂的书中剔除那些不必要的垃圾，然后结果是现在你每一句话都能给我编一个知识点？？？
+这对吗？？？我的测试txt文件已经是最简单的了，就是一些附上答案的习题了，你一道题算作一个知识点不行吗？给我乱整。。。。以后再让你分析处理那些复杂的课本，动不动还有插图，故事背景
+的你怎么处理？？？逻辑不要老是想着怎么应付我的需求，你得好好想，我们是为了给用户满意的答卷
+
+================================================================================
+2025-12-17 | 增量学习系统 + LaTeX 渲染 重大更新
+================================================================================
+
+  本次更新概述
+    针对用户反馈的核心问题（知识元提取不完整、公式不渲染、答案丢失），
+    实现了完整的增量学习系统和 LaTeX 公式渲染支持。
+
+  一、学习上下文系统 (LearningContext)
+  ----------------------------------------
+
+  新增数据结构（appStore.ts）：
+
+    interface LearningContext {
+      // 当前在知识树的位置（如 ["第一章", "1.2节"]）
+      currentPath: string[]
+
+      // 最近提取的知识点摘要（用于上下文传递）
+      recentKnowledge: Array<{
+        id: string
+        title: string
+        type: KnowledgeType
+      }>
+
+      // 待处理队列
+      pending: {
+        fragment: string | null           // 未完成的片段（如半道题）
+        exercisesAwaitingAnswer: Array<{  // 等待答案的习题
+          id: string
+          questionNumber: string
+          title: string
+        }>
+        answersAwaitingQuestion: Array<{  // 等待匹配题目的答案
+          questionNumber: string
+          answer: string
+        }>
+      }
+
+      documentType: 'exercises' | 'textbook' | 'paper' | 'general' | null
+      currentRegion: 'toc' | 'content' | 'exercises' | 'answers' | 'appendix' | null
+    }
+
+  核心设计思想：
+    - 每次只处理一页，但维护整体的学习记忆
+    - 向后兼容：习题可以等待后面的答案
+    - 向前兼容：答案可以匹配回之前的习题
+    - 片段拼接：页末被截断的内容可以和下一页拼接
+
+  二、知识点结构增强
+  ----------------------------------------
+
+  KnowledgePoint 新增字段：
+    - title: string         简短标题（用于目录显示，20字以内）
+    - type: KnowledgeType   类型（concept/theorem/example/exercise/other）
+    - hasAnswer: boolean    习题是否有答案
+    - answer?: string       答案内容
+    - questionNumber?: string  题号（用于答案匹配）
+
+  类型定义：
+    type KnowledgeType = 'concept' | 'theorem' | 'example' | 'exercise' | 'other'
+
+  三、提取 Prompt 重构 (Canvas.tsx: buildKnowledgePrompt)
+  ----------------------------------------
+
+  新的 prompt 特点：
+    1. 接受 LearningContext 参数，生成带上下文的提取指令
+    2. 要求 AI 输出更丰富的 JSON 结构：
+       - knowledgePoints: 知识点数组（含 title/type/answer 等）
+       - pathChange: 层级变化（如"进入第二章"）
+       - fragment: 本页末尾未完成的内容
+       - matchedAnswers: 匹配到的答案
+       - regionType: 当前区域类型
+
+    3. 明确要求公式用 LaTeX 格式（$..$ 或 $$..$$）
+    4. 针对不同文档类型（exercises/textbook/paper）有不同的提取策略
+
+  四、LaTeX 公式渲染
+  ----------------------------------------
+
+  新增文件：
+    - src/components/MathText.tsx  公式渲染组件
+    - src/components/MathText.css  公式样式
+
+  依赖：
+    - katex@0.16.x  LaTeX 渲染库
+
+  功能：
+    - 支持行内公式 $...$ 和 \(...\)
+    - 支持块级公式 $$...$$ 和 \[...\]
+    - 渲染失败时优雅降级（显示原始文本）
+
+  应用位置：
+    - KnowledgeTree.tsx：知识点标题渲染
+    - KnowledgeDetailModal.tsx：详情弹窗内容渲染
+
+  五、UI 增强
+  ----------------------------------------
+
+  KnowledgeTree 改进：
+    - 显示知识点类型标签（概念/定理/例题/习题）
+    - 不同类型用不同颜色区分
+    - 显示"无答案"标记（红色 ? 徽章）
+    - 支持公式渲染
+
+  KnowledgeDetailModal 改进：
+    - 分离"原文内容"和"详细讲解"两个区域
+    - 如果有答案，单独显示答案区域
+    - 公式正确渲染
+
+  AppIcon 进度条修复：
+    - 处理完成后蓝色进度条显示100%（而非卡在中间）
+    - 显示已提取知识元总数
+
+  六、.zsd 文件格式更新
+  ----------------------------------------
+
+  V3 格式继续使用，增强：
+    - app.learningContext 保存学习上下文
+    - 知识点保存新增字段（title/type/hasAnswer/answer/questionNumber）
+    - 向后兼容 V1/V2 格式
+
+  七、文件变更清单
+  ----------------------------------------
+
+  | 文件 | 变更 |
+  |------|------|
+  | src/stores/appStore.ts | 新增 LearningContext, KnowledgeType；KnowledgePoint 增加字段 |
+  | src/components/Canvas.tsx | buildKnowledgePrompt 支持上下文；toKnowledgePoints 支持新字段 |
+  | src/components/MathText.tsx | 新增 LaTeX 渲染组件 |
+  | src/components/MathText.css | 新增 公式样式 |
+  | src/components/KnowledgeTree.tsx | 使用 MathText；添加类型标签和无答案标记 |
+  | src/components/KnowledgeTree.css | 新增类型标签和标记样式 |
+  | src/components/KnowledgeDetailModal.tsx | 使用 MathText；分离原文和讲解 |
+  | src/components/KnowledgeDetailModal.css | 新增原文区域样式 |
+  | src/components/AppIcon.tsx | 修复进度条逻辑；显示知识元数量 |
+  | src/components/AppIcon.css | 新增 batch-count 样式 |
+  | src/services/zsd.ts | 支持 LearningContext 序列化/反序列化 |
+  | package.json | 添加 katex 依赖 |
+
+  八、构建验证
+  ----------------------------------------
+
+  - npm run build: ✓ 通过
+  - cargo build --release: ✓ 通过
+  - 输出: src-tauri/target/release/eduflow.exe
+
+  九、待实现（下一步）
+  ----------------------------------------
+
+  1. runBatch 函数中实际使用 LearningContext：
+     - 传递上下文给 AI
+     - 处理 AI 返回的 pathChange/fragment/matchedAnswers
+     - 更新 LearningContext 并保存
+
+  2. 答案匹配逻辑：
+     - 当检测到答案区时，自动匹配回习题
+     - 更新习题的 hasAnswer 和 answer 字段
+
+  3. 片段拼接逻辑：
+     - 下一批处理时，先拼接上次的 fragment
+     - 处理完成后清空 fragment
+
+  4. 测试场景：
+     - 习题集（题目+答案分离）
+     - 教材（章节+定理+习题）
+     - 带复杂公式的内容
+
+  十、使用说明
+  ----------------------------------------
+
+  启动程序：
+    直接运行 eduflow.exe 或 npm run tauri dev
+
+  测试公式渲染：
+    拖入包含公式的文档，点击 > 提取知识元，
+    双击知识点查看详情，确认公式正确渲染
+
+  测试增量学习（待完善）：
+    AI 返回的 JSON 中应包含 fragment 和 matchedAnswers，
+    系统会自动处理并更新 LearningContext
+
+================================================================================
+2025-12-17 | 两处 BUG 修复
+================================================================================
+
+  问题1: SettingsPanel 崩溃
+    报错: Cannot read properties of undefined (reading 'includes')
+    位置: SettingsPanel.tsx:254
+    原因: localStorage 旧数据没有 questionTypes 字段，zustand persist 合并时可能未正确补全
+    修复:
+      - 在组件中添加安全检查
+      - const questionTypes = settings.questionTypes ?? ['choice', 'fill']
+      - 将 settings.questionTypes.includes() 改为 questionTypes.includes()
+
+  问题2: 窗口销毁权限缺失
+    报错: window.destroy not allowed. Permissions associated with this command: core:window:allow-destroy
+    位置: App.tsx:33 调用 mainWindow.destroy()
+    原因: capabilities/default.json 缺少 destroy 权限
+    修复:
+      - 在 src-tauri/capabilities/default.json 添加 "core:window:allow-destroy"
+
+  修改文件:
+    | 文件 | 修改 |
+    |------|------|
+    | src/components/SettingsPanel.tsx | 添加 questionTypes 安全检查 |
+    | src-tauri/capabilities/default.json | 添加 core:window:allow-destroy 权限 |
+

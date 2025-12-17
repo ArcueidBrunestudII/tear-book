@@ -1,0 +1,279 @@
+ 读日志看项目，有太多专业性的问题要解决了，光靠你是不行的，你给我全面的获取一些前沿的权威的经典的参考技术文档或指导再去优化我的程序项目
+
+● 我先来了解一下你的项目结构和日志，看看你面临的是什么类型的技术问题。
+
+● Search(pattern: "**/*.log")
+  ⎿  Found 0 files
+
+● Search(pattern: "**/package.json")
+  ⎿  Found 99 files (ctrl+o to expand)
+
+● Search(pattern: "**/Cargo.toml")
+  ⎿  Found 1 file (ctrl+o to expand)
+
+● Read(EduMind\eduflow\package.json)
+  ⎿  Read 34 lines
+
+● Read(EduMind\eduflow\src-tauri\Cargo.toml)
+  ⎿  Read 18 lines
+
+● Search(pattern: "F:\编程项目\0011\EduMind\eduflow\src/**/*")
+  ⎿  Found 33 files (ctrl+o to expand)
+
+● Search(pattern: "F:\编程项目\0011\EduMind\eduflow\src-tauri\src/**/*")
+  ⎿  Found 1 file (ctrl+o to expand)
+
+● Read(EduMind\eduflow\src\services\siliconflow.ts)
+  ⎿  Read 98 lines
+
+● Read(EduMind\eduflow\src\services\questionGenerator.ts)
+  ⎿  Read 171 lines
+
+● Read(EduMind\eduflow\src\services\zsd.ts)
+  ⎿  Read 241 lines
+
+● Read(EduMind\eduflow\src\stores\appStore.ts)
+  ⎿  Read 430 lines
+
+● Read(EduMind\eduflow\src-tauri\src\main.rs)
+  ⎿  Read 56 lines
+
+● 现在我了解了你的项目全貌。这是一个基于 Tauri 2 + React + TypeScript 的多模态学习应用，涉及以下核心技术领域：
+
+  1. Tauri 2 桌面应用开发 (Rust + Web)
+  2. 多模态AI集成 (SiliconFlow API - DeepSeek-OCR/V3/R1, Qwen-VL)
+  3. LLM Prompt Engineering (知识点提取、题目生成)
+  4. PDF处理 (pdfjs-dist)
+  5. 状态管理 (Zustand)
+  6. 数学公式渲染 (KaTeX)
+
+  让我为你搜集各领域的权威技术文档。
+
+● Web Search("Tauri 2.0 official documentation guide 2025")
+  ⎿  Did 1 search in 22s
+
+● Web Search("DeepSeek API documentation multimodal vision OCR 2025")
+  ⎿  Did 1 search in 28s
+
+● Web Search("LLM prompt engineering best practices structured output JSON 2025")
+  ⎿  Did 1 search in 26s
+
+● Web Search("SiliconFlow API documentation 硅基流动 2025")
+  ⎿  Did 1 search in 23s
+
+● Web Search("pdfjs-dist react typescript PDF rendering best practices 2025")
+  ⎿  Did 1 search in 22s
+
+● Web Search("Zustand state management react best practices patterns 2025")
+  ⎿  Did 1 search in 28s
+
+● Web Search("KaTeX math rendering react typescript documentation 2025")
+  ⎿  Did 1 search in 23s
+
+● Web Search("Qwen VL 72B API multimodal vision language model documentation 2025")
+  ⎿  Did 1 search in 25s
+
+● Web Search("Tauri 2 invoke command Rust backend TypeScript frontend best practices 2025")
+  ⎿  Did 1 search in 25s
+
+● Web Search("AI education application knowledge extraction LLM EdTech 2025")
+  ⎿  Did 1 search in 24s
+
+● Web Search("DeepSeek R1 reasoning model API usage best practices 2025")
+  ⎿  Did 1 search in 26s
+
+● 现在我为你整理了一份全面的技术文档参考指南，按照你项目涉及的各个技术领域分类：
+
+  ---
+  EduMind/EduFlow 项目技术文档参考指南
+
+  1. Tauri 2.0 桌面应用开发
+
+  官方文档
+
+  - https://v2.tauri.app/ - 完整的 Tauri 2.0 文档主站
+  - https://v2.tauri.app/learn/ - 包含安全权限系统等实用教程
+  - https://v2.tauri.app/blog/tauri-20/ - 新特性说明
+
+  前后端通信最佳实践
+
+  - https://v2.tauri.app/develop/calling-rust/ - invoke 命令详解
+  - https://v2.tauri.app/develop/calling-frontend/ - 事件和通道机制
+  - https://lib.rs/crates/taurpc - TypeScript 完全类型安全的 IPC
+  - https://tauritutorials.com/blog/tauri-command-fundamentals - 命令定义最佳实践
+
+  关键建议：
+  - 异步命令用 async 关键字，避免阻塞 UI
+  - 大数据返回使用 tauri::ipc::Response 优化
+  - 前端参数用驼峰命名 firstName，Rust 端会自动转换
+  - 流式数据使用 Tauri Channel 机制
+
+  ---
+  2. 硅基流动 (SiliconFlow) API
+
+  官方资源
+
+  - https://siliconflow.cn/ - 主站
+  - https://www.siliconflow.com/ - 国际版
+  - https://docs.siliconflow.cn/quickstart - 接入指南
+  - https://github.com/siliconflow - 开源项目
+
+  API 要点：
+  - 完全兼容 OpenAI 格式，Base URL: https://api.siliconflow.cn/v1
+  - 支持 DeepSeek-V3、DeepSeek-R1、DeepSeek-OCR、Qwen-VL 等模型
+  - 定价：DeepSeek 模型约 $0.27/M 输入 token
+
+  ---
+  3. DeepSeek AI 模型
+
+  DeepSeek-OCR (文档识别)
+
+  - https://github.com/deepseek-ai/DeepSeek-OCR - 官方仓库
+  - https://huggingface.co/deepseek-ai/DeepSeek-OCR - 模型下载
+  - https://docs.vllm.ai/projects/recipes/en/latest/DeepSeek/DeepSeek-OCR.html - 部署文档
+  - https://arxiv.org/html/2510.18234v1 - 技术原理
+
+  OCR Prompt 模板：
+  - 文档转换：<image>\n<|grounding|>Convert the document to markdown
+  - 普通OCR：<image>\n<|grounding|>OCR this image
+  - 纯文字提取：<image>\nFree OCR
+
+  DeepSeek-R1 (推理模型)
+
+  - https://github.com/deepseek-ai/DeepSeek-R1 - 官方仓库
+  - https://api-docs.deepseek.com/news/news250120 - 官方 API 说明
+  - https://www.bentoml.com/blog/the-complete-guide-to-deepseek-models-from-v3-to-r1-and-beyond - V3/R1 对比
+  - https://www.datacamp.com/tutorial/deepseek-api - 实用示例
+
+  R1 使用建议：
+  - 复杂推理任务用 R1，简单任务用 V3 省成本
+  - 系统提示词在 R1-0528 版本已支持
+  - 利用 context caching 降低重复查询成本
+
+  ---
+  4. Qwen 视觉语言模型
+
+  - https://github.com/QwenLM/Qwen3-VL - 最新版本
+  - https://huggingface.co/Qwen/Qwen2.5-VL-72B-Instruct - 模型权重
+  - https://qwenlm.github.io/blog/qwen2-vl/ - 技术解析
+  - https://www.alibabacloud.com/help/en/model-studio/models - 云端 API
+
+  能力特点：
+  - 识别文本/图表/公式/化学结构
+  - 视频理解（1小时+）
+  - 结构化输出（发票、表单）
+  - 边界框/点坐标定位
+
+  ---
+  5. LLM Prompt Engineering (提示工程)
+
+  JSON 结构化输出
+
+  - https://hackernoon.com/for-best-results-with-llms-use-json-prompt-outputs - 核心技巧
+  - https://blog.promptlayer.com/how-json-schema-works-for-structured-outputs-and-tool-integration/ - Schema 定义
+  - https://www.progress.com/blogs/understanding-structured-output-in-llms - 原理说明
+  - https://thelearningalgorithm.ai/blogs/llm-prompt-best-practices - 综合指南
+
+  关键技巧：
+  1. 明确要求 JSON 格式："仅输出JSON，不要其他文字"
+  2. 提供示例 Schema 让模型复制结构
+  3. 使用验证后重试机制
+  4. 生产环境：一致性比完美更重要
+
+  通用提示工程
+
+  - https://www.lakera.ai/blog/prompt-engineering-guide - 2025 终极指南
+  - https://dextralabs.com/blog/prompt-engineering-for-llm/ - 高级技巧
+
+  ---
+  6. PDF 处理 (pdfjs-dist)
+
+  - https://www.npmjs.com/package/pdfjs-dist - 核心库
+  - https://github.com/wojtekmaj/react-pdf - React 封装 (推荐)
+  - https://react-pdf-viewer.dev/docs/getting-started/ - 另一个封装库
+  - https://blog.react-pdf.dev/understanding-pdfjs-layers-and-how-to-use-them-in-reactjs - 深度解析
+
+  Vite 配置要点：
+  // Worker 配置
+  import { pdfjs } from 'react-pdf';
+  pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+    'pdfjs-dist/build/pdf.worker.min.mjs',
+    import.meta.url,
+  ).toString();
+  - 需要用 vite-plugin-static-copy 复制 WASM 和 cMaps 文件
+
+  ---
+  7. Zustand 状态管理
+
+  - https://github.com/pmndrs/zustand - 官方仓库 & 文档
+  - https://www.developerway.com/posts/react-state-management-2025 - 选型建议
+  - https://dev.to/hijazi313/state-management-in-2025-when-to-use-context-redux-zustand-or-jotai-2d2k - 深度对比
+  - https://dev.to/joodi/modern-react-state-management-in-2025-a-practical-guide-2j8f - 模式指南
+
+  最佳实践：
+  - Store 按功能拆分 Slices
+  - 异步 action 直接写，Zustand 不在乎
+  - 用 devtools + persist 中间件
+  - 避免在 Server Components 中使用
+
+  ---
+  8. KaTeX 数学公式
+
+  - https://katex.org/ - 主站 & 文档
+  - https://katex.org/docs/libs - 官方推荐库
+  - https://github.com/MatejBransky/react-katex - TypeScript 支持的 React 封装
+  - https://www.npmjs.com/package/react-latex-next - 自动渲染版本
+
+  使用示例：
+  import 'katex/dist/katex.min.css';
+  import TeX from '@matejmazur/react-katex';
+
+  <TeX math="c = \pm\sqrt{a^2 + b^2}" />
+  <TeX block>{String.raw`\frac{a}{b}`}</TeX>
+
+  ---
+  9. 教育 AI / EdTech 前沿
+
+  - https://github.com/GeminiLight/awesome-ai-llm4education - 学术资源
+  - https://medium.com/prompt-engineering/the-rise-of-education-llms-2024-2025-is-the-year-ai-enters-the-classroom-0ce65fc6c0eb - 行业分析
+  - https://dl.acm.org/doi/abs/10.1145/3637528.3671498 - 顶会论文
+  - https://hai.stanford.edu/news/language-models-in-the-classroom-bridging-the-gap-between-technology-and-teaching - 斯坦福研究
+  - https://www.merlyn.org/blog/first-ever-education-specific-language-models-open-door-to-trustworthy-generative-ai-for-teachers-and-students - 专用教育模型
+  - https://medium.com/@joycebirkins/generative-ai-and-llm-in-education-25-use-cases-14-applications-a93ff73260cf - Google 教育模型
+
+  关键洞察：
+  - 知识图谱 + LLM 可减少幻觉
+  - RAG 在教育场景很有价值
+  - 需要：计算工具集成、长期记忆、练习生成、自动评估
+
+  ---
+  10. 项目架构建议
+
+  根据你的项目 (Tauri 2 + React + TypeScript + 多模态 AI)，推荐关注：
+
+  | 领域      | 优先级 | 建议                      |
+  |-----------|--------|---------------------------|
+  | Tauri IPC | 高     | 引入 TauRPC 实现类型安全  |
+  | LLM 输出  | 高     | 用 JSON Schema + 验证重试 |
+  | PDF 处理  | 中     | Worker 配置 + cMaps       |
+  | 状态管理  | 中     | 拆分 Store Slices         |
+  | OCR       | 高     | 用正确的 Prompt 模板      |
+
+  需要我针对某个具体技术领域深入获取更详细的文档吗？
+
+> 做个大计划直接给我全解决了，要让程序真正流畅实用的运行起来
+
+● 好的，我需要全面探索你的项目，找出所有问题和优化点。让我启动多个探索代理并行分析。
+
+● 3 Explore agents finished (ctrl+o to expand)
+   ├─ 探索前端架构和组件 · 27 tool uses · 71.0k tokens
+   │  ⎿  Done
+   ├─ 探索 Tauri 后端配置 · 34 tool uses · 46.4k tokens
+   │  ⎿  Done
+   └─ 探索业务逻辑和数据流 · 36 tool uses · 80.7k tokens
+      ⎿  Done
+
+● 非常详细的分析已完成。现在我来创建一个全面的实施计划。
+
+● Updated plan
+  ⎿  /plan to preview

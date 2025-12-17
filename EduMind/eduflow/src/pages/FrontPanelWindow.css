@@ -1,0 +1,67 @@
+/* 前面板窗口样式 */
+.front-panel-window {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg-primary);
+}
+
+.front-panel-window.error {
+  align-items: center;
+  justify-content: center;
+}
+
+/* 窗口头部 */
+.front-panel-window .window-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+}
+
+.front-panel-window .header-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.front-panel-window .panel-label {
+  padding: 4px 10px;
+  background: #3b82f6;
+  color: white;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.front-panel-window .app-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.front-panel-window .header-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.front-panel-window .question-count {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.front-panel-window .hint {
+  font-style: italic;
+  opacity: 0.7;
+}
+
+/* 面板内容区 */
+.front-panel-window .panel-content {
+  flex: 1;
+  overflow: hidden;
+}

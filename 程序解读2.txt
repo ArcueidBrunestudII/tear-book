@@ -1,0 +1,143 @@
+EduMind / EduFlow 项目解读（程序解读2：以当前代码为准）
+日期：2025-12-16
+
+一、项目一句话
+- 这是一个桌面端（Tauri 2 + React + TS）工具：把用户拖入的文件按“批次”增量 OCR/抽取知识点，保存为可续跑的 `.zsd`，并基于勾选的知识点生成题目（前后面板双窗口）。
+
+二、当前可运行的产品形态（按代码）
+1) 主窗口（/）
+- 白色画布（`Canvas`）：文件拖拽区 + 应用图标网格。
+- 左侧设置面板（`SettingsPanel`）：API Key、视觉模型、文本模型、深度思考、每批知识点数量 N、题目生成设置。
+
+2) “应用图标”机制
+- 每拖入一个文件生成一个 `AppItem`（`AppIcon`）。
+- 图标支持：
+	- 双击：打开两个窗口（后面板 + 前面板）。
+	- 右键：重命名/更换图标(当前为随机颜色)/属性/删除。
+	- 双进度条：绿=读取单位进度；蓝=本批知识点数量；右侧 `>` 按一次再跑一批（增量）。
+
+3) 双窗口（路由）
+- `main.tsx` 使用 `react-router-dom`：
+	- `/app/:appId/back` 后面板窗口（勾选知识点 + 运行生成题目）。
+	- `/app/:appId/front` 前面板窗口（显示题目卡片）。
+- Tauri 环境：`windowManager.openAppWindow()` 创建两个 `WebviewWindow`，分别打开上述路由。
+- 非 Tauri 环境：回退为页面跳转，仅打开后面板路由。
+
+三、核心数据结构（`src/stores/appStore.ts`）
+1) `AppItem`（一个文件对应一个应用）
+- 基本字段：`id/name/icon/sourceFile/fileType/status/knowledgePoints/processedCount/...`
+- 增量字段：
+	- `contentCursor/contentTotal/hasMore`：当前已消耗/总单位数/是否还有更多。
+	- `batchIndex/batchTarget/batchProducedCount`：批次号/本批目标 N/本批产出。
+	- `cacheText`：缓存文本（用于“读一个单位→抽取→不够再读一个单位”的循环）。
+- 题目会话：`questionSessions/currentSessionId`。
+
+2) `KnowledgePoint`
+- `id/content/level/parentId/children/enabled/selected/refPath/detailContent/createdAt`
+- `selected` 用于题目生成的勾选；`detailContent` 为知识点详细讲解（懒加载）。
+
+3) `Settings`
+- `apiKey`（硅基流动）
+- `ocrModel`: deepseek-ocr | qwen-vl
+- `textModel`: deepseek-v3 | deepseek-r1
+- `deepThinking`: boolean（会强制用 R1 抽知识点）
+- `batchKnowledgeCount`（每批知识点数量 N）
+- 题目设置：`questionTypes/questionCountPerType/defaultShowAnswer/defaultDifficulty`。
+
+4) 持久化
+- Zustand `persist`：保存 `settings` 与 `apps` 到 `localStorage`（`eduflow-storage`）。
+
+四、主流程：拖拽→增量抽知识点（`src/components/Canvas.tsx`）
+入口
+- 拖拽监听：
+	- Tauri：`getCurrentWindow().onDragDropEvent` 监听 enter/over/leave/drop，并对路径做归一化去重。
+	- 非 Tauri：回退 DOM drag/drop（注意：这里 `sourceFile` 会是 `file.name`）。
+- 去重策略：
+	- `recentDropRef` 2 秒内同源去重；
+	- store 已存在同 `sourceFile` 的 app 不重复创建。
+
+核心函数 `runBatch(appId, fileName, source, ext)`
+1) 前置条件
+- 未配置 `settings.apiKey` 会直接跳过处理。
+
+2) `.zsd` 特殊处理（恢复应用）
+- 读取文本 → `parseZsd()` → 创建新 id 的 app 加入 store → 删除临时占位 app。
+
+3) 其他文件：增量批处理
+- 选择模型：
+	- OCR 走 `settings.ocrModel` 对应的 `DeepSeek-OCR` 或 `Qwen2.5-VL-72B`。
+	- 抽知识点走文本模型：若 `deepThinking` 或 `textModel==='deepseek-r1'` 用 R1，否则用 V3。
+- Prompt：`buildKnowledgePrompt(N)` 强制“严格 JSON、最多 N 条、禁止编造、不足可少”。
+
+4) “读单位→缓存→抽取”循环
+- 循环上限 guard=20。
+- 若 `cacheText` 为空，则读取下一个“单位”进入缓存；随后对 `cacheText` 抽取一次知识点；若不足 N 则继续读下一个单位并重试。
+
+5) 单位定义与读取方式（`readNextUnitIntoCache()`）
+- txt/md：按字符分块（`TEXT_CHUNK_SIZE=3000`），并尝试在段落/句号处断开；每次读 1 块作为 1 个单位。
+- pdf：读取 bytes → `getPdfPageCount()` 得总页数 → `pdfPageToPngBase64(pageNo)` 渲染指定页 → OCR → 追加到 `cacheText`；每页为 1 单位。
+- png/jpg/jpeg：
+	- 第 1 单位：整张 OCR。
+	- 若仍不足 N：第 2 单位：自动分上/下半各 OCR（`splitImageBase64Halves`），合并到缓存。
+
+6) 批次完成后的合并规则
+- `nextBatchIndex = latest.batchIndex + 1`。
+- `remapBatchIds()`：给本批知识点 id 加 `b{batchIndex}_` 前缀，避免多批次 id 冲突，并重算 `refPath`。
+- 知识点合并策略：追加（append）到 `latest.knowledgePoints`，不覆盖旧数据。
+- `hasMore = contentCursor < contentTotal`；若无更多则 `status='done'`，否则回到 `pending` 等待用户点 `>`。
+- 每批结束会清空 `cacheText`。
+
+7) `.zsd` 落盘（MVP）
+- `saveZsdIfPossible()`：仅在 Tauri 且 `sourceFile` 是 Windows 盘符路径（`^[a-zA-Z]:\\`）时，尝试写入“同目录同名 .zsd”（例如 `a.pdf` → `a.zsd`）。
+- 写失败只 `console.warn`，不阻断流程。
+
+五、知识点勾选与讲解（后面板窗口）
+- 后面板窗口 `BackPanelWindow`：展示 `BackPanel`（`KnowledgeTree`），并提供“运行（生成题目）”按钮。
+- `KnowledgeTree`：
+	- 三态复选框（全选/部分/不选）+ 级联选择（会递归影响后代）。
+	- 节点展开/折叠（默认 level<2 展开）。
+	- 双击叶子节点：打开 `KnowledgeDetailModal`。
+- `KnowledgeDetailModal`：
+	- 若 `detailContent` 未缓存：调用 V3 生成“概念解释/核心要点/误区/应用”的详细讲解，并写回 store。
+
+六、题目生成与展示（前面板窗口）
+1) 生成（`src/services/questionGenerator.ts`）
+- 在 `BackPanelWindow` 点击运行：
+	- 取被勾选（`selected`）的知识点；按 `settings.questionTypes` 遍历题型，每题型生成 `settings.questionCountPerType` 道。
+	- 当前固定使用 `MODEL_IDS.text.v3` 出题（不受 deepThinking 影响）。
+	- AI 返回严格 JSON：`{"questions":[{...}]}`，用 `tryParseJsonObject()` 解析。
+- 生成成功：写入 `questionSessions` 并设置 `currentSessionId`。
+
+2) 展示（`FrontPanelWindow` + `FrontPanel` + `QuestionCard`）
+- 显示当前会话题目列表；支持“默认显示答案”设置。
+- `QuestionCard` 支持收藏（★/☆），收藏状态写入 store。
+
+七、SiliconFlow 调用策略（前端+后端）
+1) 前端统一入口：`src/services/siliconflow.ts`
+- Tauri 环境优先走 `invoke('siliconflow_chat')`（避免 webview CORS/网络限制）。
+- 非 Tauri 环境回退 fetch 直连 `https://api.siliconflow.cn/v1/chat/completions`。
+
+2) Rust 后端代理：`src-tauri/src/main.rs`
+- `siliconflow_chat`：`reqwest` POST SiliconFlow，超时可配置，返回原始 JSON 字符串。
+- 注册插件：`tauri-plugin-shell`（打开外链）、`tauri-plugin-fs`（读写文件）。
+
+八、Tauri Capabilities（权限）
+- `src-tauri/capabilities/default.json`：
+	- 允许 core window/webview 能力；
+	- 允许 `shell:default`；
+	- 允许 fs 读写（read/write/text/file）；
+	- `fs:scope` 当前为 `**/*`（开发方便，产品化建议收敛）。
+
+九、当前实现的限制/注意点（按代码观察）
+- 图片增量仅做到“整张→上下半”两步；未实现更细粒度滑窗/多次分割。
+- 每批结束会清空 `cacheText`：属于“批内缓存”，未做更精细的“部分消耗/剩余缓存续用”。
+- `.zsd` 当前是 JSON（v2），包含 app 全量状态 + 题目会话；未压缩/未校验。
+- 设置与 apps 会持久化到 `localStorage`：API Key 会落到本地持久化（需要你评估安全策略）。
+
+十、下一步建议（最贴近当前代码的短路径）
+1) 抽知识点更稳：为 `extractOnce()` 加“重试/降级”与更强的 JSON schema 约束（避免模型输出不稳定导致 produced=0）。
+2) `.zsd` 落盘策略：改为“保存到用户选择的工作目录”，并把写入失败原因可视化。
+3) 出题模型与深度思考：题目生成当前固定 V3；若想一致，可按设置切换到 R1。
+4) 安全：考虑让 API Key 不参与 persist，或加密存储/改用系统安全凭据。
+
+（完）

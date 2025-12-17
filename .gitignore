@@ -1,0 +1,35 @@
+# Dependencies
+**/node_modules/
+
+# Build output
+**/dist/
+**/build/
+**/.vite/
+**/coverage/
+
+# Tauri / Rust
+**/target/
+**/src-tauri/target/
+
+# Python
+**/__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+
+# Environment
+.env
+.env.*
+
+# Editor/OS
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local tooling
+.claude/
+
+# Windows reserved filenames / local installers
+nul
+rustup-init.exe

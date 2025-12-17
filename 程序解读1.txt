@@ -1,0 +1,221 @@
+EduMind / EduFlow 项目解读（程序解读1）
+日期：2025-12-16
+
+一、项目一句话
+- 这是一个桌面端（Tauri 2 + React）“拖入文件 → OCR/抽取知识点 → 按批增量继续 → 落盘为 .zsd 可跨电脑续跑”的学习拆解工具。
+- 核心理念：逐字逐句拆解知识点，尽量保留细节，不做“总结式缩写”。
+
+二、仓库结构概览（工作区根：f:\编程项目\0011）
+- 日志：`日志.txt`（需求与变更记录，基本等于产品/技术决策线索）
+- Python 原型与测试：`EduMind/chat_prototype.py`、`EduMind/test/*`（早期验证 SiliconFlow 模型、PDF→图、OCR 对比等）
+- 桌面端主项目：`EduMind/eduflow/`
+  - 前端（Vite + React + TS）：`EduMind/eduflow/src/*`
+  - Tauri 后端（Rust）：`EduMind/eduflow/src-tauri/*`
+
+三、产品形态与交互（按日志与当前实现）
+1) 主界面
+- 白色画布为主区域（`Canvas`），支持拖拽文件。
+- 左侧“>”展开设置面板（`SettingsPanel`）。
+
+2) 文件→应用图标（Win11 桌面风格）
+- 每拖入一个文件生成一个“应用图标”（`AppIcon`）。
+- 图标支持：双击打开内容面板；右键菜单：重命名/更换图标/属性/删除。
+
+3) 双进度条 + 增量按钮
+- 绿条：读单位/缓存进度（PDF=页数推进；图片=整张/半张推进；文本=1）。
+- 蓝条：本批知识点数量进度（目标 N；右侧 `>` 按一次再识别一批）。
+
+4) 先做列表，不做思维导图
+- 目前“后面板”实现为分级勾选列表（`Canvas.tsx` 内 overlay），知识点可 enabled/disabled。
+- 思维导图规划存在，但当前未实现。
+
+四、核心需求（日志定版）
+- 设置项：每次识别的知识点数量 N（批量目标）。
+- 增量识别：每次读取 1 个单位（PDF 1页/图片 1张或半张/文本 1段）→ 追加到缓存 → 抽取知识点；不足 N 就继续读下一个单位，直到达到 N 或读完。
+- 缓存策略：每批结束后“消耗已处理单位”，下一批从游标继续。
+- 自定义文件格式：`.zsd` 保存中间数据（知识点+进度+游标等）可跨机器继续。
+
+五、关键代码文件与职责（最重要）
+A. 前端入口
+- `EduMind/eduflow/src/main.tsx`
+  - React 挂载入口。
+- `EduMind/eduflow/src/App.tsx`
+  - 只做布局：`<Canvas /> + <SettingsPanel />`。
+
+B. 主要业务：`Canvas`
+- 文件：`EduMind/eduflow/src/components/Canvas.tsx`
+- 作用：拖拽接入、创建 app、增量批处理 runBatch、后面板知识点列表。
+- 核心函数：
+  1) `createAppFromFile(fileName, sourceFile)`
+     - 识别扩展名：txt/md/pdf/png/jpg/jpeg/zsd。
+     - 初始化 AppItem（含增量字段）：cursor/total/hasMore、batchIndex/Target/Produced、cacheText。
+  2) `addIfNew(fileName, sourceFile, source?)`
+     - 做去重：
+       - `recentDropRef` 2s 内同路径去重
+       - 已存在同 sourceFile 的 app 不再创建
+     - `addApp(app)` 后立刻 `runBatch()`。
+  3) `runBatch(appId, fileName, source, ext)` —— 关键主链路
+     - 若 ext==zsd：直接读入并 `parseZsd()` 恢复；创建新 id 的 app 替换临时 app。
+     - 其他类型：
+       - 取本批目标 `batchTarget = settings.batchKnowledgeCount ?? settings.initialKnowledgeCount`。
+       - `readNextUnitIntoCache()` 负责按类型把下一个单位读进 `cacheText` 并推进 `contentCursor/contentTotal`：
+         - 文本：一次读完，cursor=1,total=1。
+         - PDF：读取 bytes → `getPdfPageCount()` 得总页数 → 渲染 pageNo → OCR → 追加到 cacheText → cursor++。
+         - 图片：先 OCR 整张（cursor=1,total=1）；若不足则上下半各 OCR（cursor=2,total=2）。
+       - `extractOnce(cacheText)`：用文本模型把缓存文本抽成“严格 JSON 知识点”。
+         - prompt 要求：最多 N 条、可多层级、禁止编造、不足可少。
+         - 返回内容会 `tryParseJsonObject()` → `toKnowledgePoints()`。
+       - while 循环（guard<=20）：
+         - 不够 N 则继续读单位再抽一次。
+       - 合并：
+         - `remapBatchIds(nextBatchIndex, produced)` 给 id 加前缀 `b{batchIndex}_` 防冲突，并重算 `refPath`。
+         - 追加到 `knowledgePoints`（append）。
+         - 更新 `processedCount`、`batchIndex`、`batchProducedCount`。
+         - `cacheText` 清空。
+         - PDF 若未读完：`hasMore=true,status='pending'`；读完：`status='done'`。
+       - `saveZsdIfPossible(updated)`：在 Tauri 且本地盘符路径时写同目录 `.zsd`。
+
+C. UI：`AppIcon`
+- 文件：`EduMind/eduflow/src/components/AppIcon.tsx`
+- 作用：展示一个 AppItem（图标 + 名称 + 双进度条 + 状态）。
+- 关键点：
+  - 绿条 readProgress：`contentCursor/contentTotal`。
+  - 蓝条 batchProgress：`batchProducedCount/batchTarget`。
+  - “>”按钮：`disabled={status==='processing' || !hasMore}`，点击触发 `onNextBatch`。
+  - done badge：`status==='done' && !hasMore` 才显示。
+
+D. 设置面板：`SettingsPanel`
+- 文件：`EduMind/eduflow/src/components/SettingsPanel.tsx`
+- 作用：API Key、OCR 模型、文本模型、深度思考、每批知识点数量。
+- 外链打开：`openExternal()`
+  - Tauri 里优先 `@tauri-apps/plugin-shell` 的 `open(url)`
+  - 失败回退 `window.open()`。
+
+E. 状态管理：Zustand Store
+- 文件：`EduMind/eduflow/src/stores/appStore.ts`
+- 作用：管理 settings、apps 列表、activeAppId、sidebarOpen 等，并用 `persist` 保存到本地存储。
+- 关键数据结构：
+  - `Settings`：
+    - `apiKey`
+    - `ocrModel`: 'deepseek-ocr' | 'qwen-vl'
+    - `textModel`: 'deepseek-v3' | 'deepseek-r1'
+    - `deepThinking`: boolean
+    - `batchKnowledgeCount`: number（本批 N）
+    - `initialKnowledgeCount`: number（兼容旧字段）
+  - `AppItem`：
+    - `knowledgePoints: KnowledgePoint[]`
+    - `contentCursor/contentTotal/hasMore`（增量游标）
+    - `batchIndex/batchTarget/batchProducedCount`（批次状态）
+    - `cacheText`（缓存）
+
+F. SiliconFlow API 调用
+- 文件：`EduMind/eduflow/src/services/siliconflow.ts`
+- 作用：统一对外 `siliconflowChat()`。
+- 关键点：
+  - `isTauriRuntime()` 判断 Tauri 环境。
+  - Tauri 环境优先 `invoke('siliconflow_chat', { args })`：
+    - Rust 端真正发 HTTP，避免 webview 的 CORS/网络限制。
+  - 非 Tauri（浏览器预览）回退 fetch 直连 SiliconFlow。
+- 模型 id：
+  - 文本：`deepseek-ai/DeepSeek-V3.2`、`deepseek-ai/DeepSeek-R1`
+  - 视觉/OCR：`deepseek-ai/DeepSeek-OCR`、`Qwen/Qwen2.5-VL-72B-Instruct`
+
+G. 文件工具
+- 文件：`EduMind/eduflow/src/services/fileUtils.ts`
+- 作用：
+  - `extToMime()`
+  - `uint8ToBase64()`
+  - `fileToBase64()` / `fileToText()`
+  - `tryParseJsonObject()`：兼容模型把 JSON 包在 ```json 代码块里。
+
+H. PDF 渲染
+- 文件：`EduMind/eduflow/src/services/pdfToImage.ts`
+- 作用：
+  - `getPdfPageCount(pdfBytes)`：拿总页数
+  - `pdfPageToPngBase64(pdfBytes, pageNumber)`：渲染指定页为 PNG base64（无 data: 前缀）
+- 注意：使用 `pdfjs-dist/legacy/build/pdf.mjs` + worker。
+
+I. `.zsd` 文件
+- 文件：`EduMind/eduflow/src/services/zsd.ts`
+- 作用：
+  - `serializeAppToZsd(app)`：JSON v1
+  - `parseZsd(text)`：解析并补齐缺失字段默认值（enabled/refPath/游标等）
+- 当前 v1 结构：
+  - `{ version: 1, createdAt, app: AppItem }`
+
+六、Tauri/Rust 后端（为什么需要它）
+- 文件：`EduMind/eduflow/src-tauri/src/main.rs`
+- 做的事：
+  - 注册插件：`tauri_plugin_shell`（外链打开）、`tauri_plugin_fs`（读写文件）
+  - 暴露命令：`siliconflow_chat` 作为前端代理。
+- `siliconflow_chat`：
+  - 用 `reqwest` POST `https://api.siliconflow.cn/v1/chat/completions`
+  - 传入 model/messages/max_tokens/timeout
+  - 返回 API 原始 JSON 字符串，前端再解析 choices[0].message.content。
+
+七、Tauri Capabilities（权限为什么重要）
+- 文件：`EduMind/eduflow/src-tauri/capabilities/default.json`
+- 目前允许：
+  - `core:default`
+  - `shell:default`
+  - `fs:allow-read*`、`fs:allow-write*`
+  - `fs:scope` allow `**/*`（范围很宽，开发期方便，生产建议收敛）
+
+八、从 Python 原型到 EduFlow 的演进线索
+- `EduMind/chat_prototype.py`：最初聊天窗口 + 选择模型 + 上传附件（txt/pdf/image），验证“视觉模型多轮限制/英文输出/token限制”等问题。
+- `EduMind/test/*`：
+  - `api_test.py`：验证 SiliconFlow 文本/视觉接口可用。
+  - `pdf_ocr_test.py`：PDF→图片→分别测 OCR/VL/Qwen。
+  - `ocr_compare_viewer.py`：对比 DeepSeek-OCR vs Qwen2.5-VL 识别结果。
+- 结论落地到桌面端：主链路用 DeepSeek-OCR 做 OCR，避免 VL2 的限制；抽知识点用 V3/R1。
+
+九、运行方式（Windows PowerShell，推荐）
+你之前在工作区根目录跑 `npm run tauri dev` 会失败，正确方式是指定项目目录：
+
+```powershell
+npm --prefix "f:\编程项目\0011\EduMind\eduflow" install
+npm --prefix "f:\编程项目\0011\EduMind\eduflow" run tauri dev
+```
+
+单独检查：
+```powershell
+Set-Location "f:\编程项目\0011\EduMind\eduflow"; npm run build
+Set-Location "f:\编程项目\0011\EduMind\eduflow\src-tauri"; cargo check
+```
+
+十、常见问题/排障清单（按现有实现）
+1) `npm run tauri dev` 退出码 1
+- 大概率原因：工作目录不对（从日志看你在 `f:\编程项目\0011` 跑过）。
+- 用 `npm --prefix ...` 固定路径。
+
+2) “获取 API Key” 打不开浏览器
+- 走 `SettingsPanel.tsx` 的 `openExternal()`：需要 `@tauri-apps/plugin-shell` + capabilities 允许 `shell:default`。
+
+3) 拖拽文件没反应
+- Tauri 环境依赖 `onDragDropEvent`。
+- 如果仍无反应：
+  - 检查是否真的在 Tauri app 内运行（不是浏览器 tab）。
+  - 检查 `Canvas.tsx` 的 drop 事件是否被覆盖（页面上是否有其他层遮挡）。
+
+4) `.zsd` 没写出来
+- `saveZsdIfPossible()` 只在：
+  - 不是 zsd 文件本身
+  - sourceFile 符合盘符路径（正则 `^[a-zA-Z]:\\`）
+  - 且写入权限允许（capabilities fs write + scope）
+- 写失败只 `console.warn`，不会阻断流程。
+
+5) API 报错/超时
+- Tauri 模式先走 Rust `reqwest`；网络/证书/代理问题会在 Rust 返回 `siliconflow http xxx: ...`。
+- 前端 fetch 回退路径也可能遇到 CORS/网络限制。
+
+十一、明显风险点（建议你尽快处理）
+- `EduMind/test/*.py` 和 `EduMind/chat_prototype.py` 里存在硬编码 API Key（安全风险，建议立刻移除/改为环境变量/本地不提交）。
+
+十二、下一步开发建议（按日志的“已知限制”）
+- 文本增量：目前 txt/md 是一次性读完，后续可改“分段/窗口化”真正按单位推进。
+- 图片增量：目前只做“整张→上下半”两步，后续可更细粒度（四分/滑窗/按段）。
+- 缓存“部分消耗”：现在每批完成就清空 `cacheText`，还没实现“只消耗一部分文本”的更精细策略。
+- `.zsd`：目前是 JSON v1（无压缩/校验/分块），可考虑加 schema/hash/compression 以及可选缓存 OCR 结果避免重复 OCR。
+- fs scope：当前 `**/*` 过宽，产品化需要收敛到用户目录或用户授权路径。
+
+（完）

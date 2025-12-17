@@ -1,0 +1,276 @@
+================================================================================
+                    EduMind/EduFlow 版本维护指南 v1.0
+                         优化日期: 2025-12-17
+================================================================================
+
+【项目概述】
+技术栈: Tauri 2 + React 18 + TypeScript + Vite + Zustand + SiliconFlow API
+功能: 多模态学习应用 - 知识点提取、题目生成、思维导图
+
+================================================================================
+                              优化内容清单
+================================================================================
+
+【Wave 1】基础安全与稳定性修复
+--------------------------------------------------------------------------------
+
+1. CSP 安全策略修复
+   文件: src-tauri/tauri.conf.json
+   修改: 将 "csp": null 改为严格的内容安全策略
+   原因: 禁用 CSP 是严重安全漏洞
+
+2. 文件系统权限限制
+   文件: src-tauri/capabilities/default.json
+   修改: 从 "**/*" 限制到特定用户目录，禁止敏感文件访问
+   原因: 全文件系统访问权限过大
+
+3. API 调用重试机制
+   文件: src/services/siliconflow.ts
+   新增:
+   - ApiErrorType 枚举（区分错误类型）
+   - ApiError 类（结构化错误）
+   - retryWithBackoff 函数（指数退避重试）
+   - 修复 invoke 参数传递（移除嵌套的 args）
+
+4. JSON 解析增强
+   文件: src/services/fileUtils.ts
+   新增:
+   - sanitizeJsonString: 清理 JSON 字符串
+   - tryFixTruncatedJson: 修复截断的 JSON
+   - extractJsonObjects: 提取多个 JSON 对象
+   - normalizeQuestionNumber: 题号规范化（中文→阿拉伯数字）
+   - questionNumbersMatch: 题号模糊匹配
+
+5. Rust 后端错误处理
+   文件: src-tauri/src/main.rs, src-tauri/Cargo.toml
+   新增:
+   - ApiError 枚举（ValidationError, NetworkError, Timeout 等）
+   - validate_args 函数
+   - classify_http_error 函数
+   - 日志记录（env_logger）
+
+================================================================================
+
+【Wave 2】Canvas.tsx 架构重构
+--------------------------------------------------------------------------------
+
+原文件: src/components/Canvas.tsx (1153行) - 已删除
+
+拆分为以下模块:
+
+1. src/components/Canvas/index.tsx (~50行)
+   - 主容器组件，整合所有 hooks
+
+2. src/components/Canvas/FileDropZone.tsx (~120行)
+   - 文件拖拽区域组件
+   - Tauri 原生拖拽 + 浏览器 DOM 回退
+
+3. src/components/Canvas/AppGrid.tsx (~150行)
+   - 应用图标网格
+   - 右键菜单、重命名、属性面板
+
+4. src/components/Canvas/hooks/useZsdManager.ts (~90行)
+   - .zsd 文件内存管理
+   - 磁盘读写操作
+
+5. src/components/Canvas/hooks/useFileProcessor.ts (~160行)
+   - 文件转换为 .zsd V3 格式
+   - 支持 txt/md/pdf/png/jpg/jpeg/zsd
+
+6. src/components/Canvas/hooks/useBatchProcessor.ts (~300行)
+   - 撕书机制核心逻辑
+   - OCR + 知识点提取 + 答案匹配
+
+新增服务文件:
+
+7. src/services/documentTypeDetector.ts
+   - 文档类型检测（exercises/textbook/paper/general）
+   - buildKnowledgePrompt 生成 AI 提示词
+
+8. src/services/knowledgeExtractor.ts
+   - toKnowledgePoints: AI 返回转知识点
+   - remapBatchIds: 批次 ID 重映射
+
+9. src/services/learningContextManager.ts
+   - processAnswerMatching: 答案匹配处理
+   - updateLearningContext: 上下文更新
+   - finalizeLearningContext: 处理完成清理
+
+================================================================================
+
+【Wave 3】状态管理 + 跨窗口同步
+--------------------------------------------------------------------------------
+
+1. Tauri 事件总线
+   新文件: src/services/tauriEventBus.ts
+   功能:
+   - EventType 枚举（APP_UPDATED, PROCESSING_PROGRESS 等）
+   - emitEvent: 发送跨窗口事件
+   - onEvent: 监听事件
+   - setupTauriEventListeners: 设置 Tauri 监听器
+
+2. appStore 优化
+   文件: src/stores/appStore.ts
+   新增:
+   - updateApp 添加 emitSync 参数（控制是否发送同步事件）
+   - batchUpdateApps: 批量原子更新
+   - syncAppFromEvent: 从其他窗口同步（不触发事件，避免循环）
+
+3. 跨窗口同步 Hook
+   新文件: src/hooks/useCrossWindowSync.ts
+   导出:
+   - useCrossWindowSync: 主窗口同步 hook
+   - useComputedKnowledgeCount: 计算知识点数量
+   - useBatchProgress: 批次进度百分比
+   - useContentProgress: 内容处理进度
+
+4. App.tsx 更新
+   添加 useCrossWindowSync() 调用
+
+================================================================================
+
+【Wave 4】性能优化 + 内存泄漏修复
+--------------------------------------------------------------------------------
+
+1. KnowledgeTree 性能优化
+   文件: src/components/KnowledgeTree.tsx
+   优化内容:
+   - 原复杂度: O(n²) - 每次渲染都遍历查找
+   - 新复杂度: O(n) - 预构建索引
+   - TreeIndexes 接口: parentMap, childrenMap, descendantsCache
+   - buildTreeIndexes: 一次遍历构建所有索引
+   - getSelectionStateWithIndex: 使用索引计算选中状态
+   - 添加 useCallback 优化回调函数
+
+2. PDF.js 内存泄漏修复
+   文件: src/services/pdfToImage.ts
+   修复:
+   - Canvas 清理: canvas.width = 0; canvas.height = 0
+   - PDF 页面清理: page.cleanup()
+   - PDF 文档清理: pdf.destroy()
+   - 使用 try-finally 确保清理执行
+
+3. 窗口缓存健康检查
+   文件: src/services/windowManager.ts
+   新增:
+   - startWindowHealthCheck: 启动定期检查（30秒）
+   - stopWindowHealthCheck: 停止检查
+   - clearWindowCache: 清理所有缓存
+   - getOpenWindowCount: 获取打开窗口数
+   - 自动启动（Tauri 环境）
+
+================================================================================
+
+【Wave 5】AI/OCR 增强 + 数据持久化
+--------------------------------------------------------------------------------
+
+1. 题目生成增强
+   文件: src/services/questionGenerator.ts
+   新增:
+   - GenerateQuestionsResult 接口（包含 questions, errors, totalRequested, totalGenerated）
+   - MAX_RETRIES = 2（最大重试次数）
+   - 选择题验证：必须有 ABCD 四个选项
+   - 选项格式自动修复
+   - 部分成功处理
+   - generateQuestionsLegacy: 向后兼容方法
+
+2. BackPanelWindow 更新
+   文件: src/pages/BackPanelWindow.tsx
+   修改: 适配新的 generateQuestions 返回类型
+
+================================================================================
+                              文件结构总览
+================================================================================
+
+src/
+├── App.tsx                          # 主入口（添加跨窗口同步）
+├── components/
+│   ├── Canvas/                      # Canvas 模块（重构后）
+│   │   ├── index.tsx               # 主组件
+│   │   ├── FileDropZone.tsx        # 文件拖拽
+│   │   ├── AppGrid.tsx             # 应用网格
+│   │   └── hooks/
+│   │       ├── index.ts            # hooks 导出
+│   │       ├── useZsdManager.ts    # .zsd 管理
+│   │       ├── useFileProcessor.ts # 文件处理
+│   │       └── useBatchProcessor.ts# 批次处理
+│   └── KnowledgeTree.tsx           # 知识树（性能优化）
+├── hooks/
+│   ├── index.ts                    # hooks 导出
+│   └── useCrossWindowSync.ts       # 跨窗口同步
+├── services/
+│   ├── siliconflow.ts              # API 服务（重试机制）
+│   ├── fileUtils.ts                # 文件工具（JSON 增强）
+│   ├── pdfToImage.ts               # PDF 转图片（内存修复）
+│   ├── windowManager.ts            # 窗口管理（健康检查）
+│   ├── tauriEventBus.ts            # 事件总线（新增）
+│   ├── documentTypeDetector.ts     # 文档类型检测（新增）
+│   ├── knowledgeExtractor.ts       # 知识点提取（新增）
+│   ├── learningContextManager.ts   # 学习上下文（新增）
+│   └── questionGenerator.ts        # 题目生成（增强）
+├── stores/
+│   └── appStore.ts                 # 全局状态（批量更新+同步）
+└── pages/
+    └── BackPanelWindow.tsx         # 后面板（适配新 API）
+
+src-tauri/
+├── tauri.conf.json                 # Tauri 配置（CSP 修复）
+├── capabilities/default.json       # 权限配置（限制）
+├── Cargo.toml                      # Rust 依赖（新增 thiserror, log, env_logger）
+└── src/main.rs                     # Rust 后端（错误处理增强）
+
+================================================================================
+                              常用命令
+================================================================================
+
+# 开发模式
+npm run tauri dev
+
+# 类型检查
+npx tsc --noEmit
+
+# 前端构建
+npm run build
+
+# Rust 检查
+cargo check --manifest-path src-tauri/Cargo.toml
+
+# 完整构建
+npm run tauri build
+
+================================================================================
+                              注意事项
+================================================================================
+
+1. API Key 安全
+   - 当前存储在 localStorage（明文）
+   - 建议后续使用 Tauri 密钥环插件安全存储
+
+2. 大文件处理
+   - 超过 50MB 的 PDF 可能导致内存问题
+   - 建议后续实现分块存储或使用 IndexedDB
+
+3. 跨窗口同步
+   - 使用 Tauri 事件系统
+   - syncAppFromEvent 不触发事件，避免循环
+
+4. 错误处理
+   - API 错误会自动重试（最多 3 次）
+   - 认证错误不重试
+   - 题目生成支持部分成功
+
+5. 性能
+   - KnowledgeTree 已优化到 O(n)
+   - PDF 渲染后自动清理内存
+   - 窗口缓存每 30 秒检查一次
+
+================================================================================
+                              版本历史
+================================================================================
+
+v1.0 (2025-12-17)
+- 初始优化版本
+- 修复 40+ 个问题
+- 5 波并行优化完成
+
+================================================================================

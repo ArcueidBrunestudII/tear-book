@@ -1,0 +1,41 @@
+/* 数学公式渲染样式 */
+.math-text {
+  line-height: 1.6;
+  word-wrap: break-word;
+}
+
+.math-inline {
+  display: inline;
+  margin: 0 2px;
+}
+
+.math-block {
+  display: block;
+  margin: 12px 0;
+  overflow-x: auto;
+  text-align: center;
+}
+
+.math-error {
+  color: #ef4444;
+  background: #fef2f2;
+  padding: 2px 4px;
+  border-radius: 2px;
+  font-family: monospace;
+  font-size: 0.9em;
+}
+
+/* 确保 KaTeX 字体正常显示 */
+.katex {
+  font-size: 1.1em;
+}
+
+.katex-display {
+  margin: 0;
+  padding: 8px 0;
+}
+
+/* 公式选中样式 */
+.math-text ::selection {
+  background: rgba(59, 130, 246, 0.3);
+}
